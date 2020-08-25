@@ -31,6 +31,8 @@ def get_args_parser():
     # Model parameters
     parser.add_argument('--frozen_weights', type=str, default=None,
                         help="Path to the pretrained model. If set, only the mask head will be trained")
+    parser.add_argument('--train_only_head', action='store_true', 
+                        help="Train only classification head for the detection model")
     # * Backbone
     parser.add_argument('--backbone', default='resnet50', type=str,
                         help="Name of the convolutional backbone to use")
@@ -108,6 +110,8 @@ def main(args):
 
     if args.frozen_weights is not None:
         assert args.masks, "Frozen training is meant for segmentation only"
+    if args.train_only_head:
+        assert not args.masks, "Head training is only available for detection"
     print(args)
 
     device = torch.device(args.device)
@@ -187,6 +191,12 @@ def main(args):
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
         return
+
+    if args.train_only_head:
+        for param in model_without_ddp.parameters():
+            param.requires_grad = False
+        model_without_ddp.class_embed.weight.requires_grad = True
+        model_without_ddp.class_embed.bias.requires_grad = True
 
     print("Start training")
     start_time = time.time()
